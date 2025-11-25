@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Ranking FIFA — Top 20</title>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <style>
+    :root{
+      --bg:#f7efee;
+      --card:#ffffff;
+      --accent:#b22222; /* escarlata */
+      --accent-dark:#7a1212;
+      --muted:#6b7280;
+      --glass: rgba(255,255,255,0.6);
+      --badge-start:#ffd9d6;
+      --badge-end:#ff6b6b;
+    }
+    *{box-sizing:border-box}
+    body{font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; margin:0; background:var(--bg); color:#0f172a}
+    .hero{background:linear-gradient(90deg,var(--accent),var(--accent-dark)); color:white; padding:36px 18px}
+    .wrap{max-width:1100px;margin:0 auto;padding:0 18px}
+    .hero-grid{display:flex;align-items:center;gap:18px;flex-wrap:wrap}
+    .title{font-size:28px;margin:0 0 6px}
+    .subtitle{margin:0;color:rgba(255,255,255,0.9)}
+    .controls{display:flex;gap:8px;align-items:center;margin-top:14px}
+    .search{padding:10px 12px;border-radius:10px;border:1px solid rgba(255,255,255,0.12);min-width:220px;background:rgba(255,255,255,0.06);color:white}
+    .search::placeholder{color:rgba(255,255,255,0.85)}
+    .btn{background:rgba(255,255,255,0.08);color:white;padding:10px 12px;border-radius:10px;border:1px solid rgba(255,255,255,0.12);cursor:pointer;transition:all .16s ease}
+    .btn:hover{background:rgba(255,255,255,0.14);transform:translateY(-2px)}
+
+    main{max-width:1100px;margin:20px auto;padding:0 18px}
+    .toolbar{display:flex;justify-content:space-between;align-items:center;gap:12px}
+    .left-tools{display:flex;gap:8px;align-items:center}
+    .view-toggle{background:transparent;border:1px solid #e6eefc;padding:8px;border-radius:8px;cursor:pointer}
+    .cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:16px;margin-top:18px}
+    .card{background:var(--card);border-radius:12px;padding:14px;box-shadow:0 10px 30px rgba(178,34,34,0.06);display:flex;gap:12px;align-items:center;transition:transform .18s,box-shadow .18s}
+    .card:hover{transform:translateY(-6px);box-shadow:0 18px 46px rgba(178,34,34,0.08)}
+    .flag{width:56px;height:56px;border-radius:10px;background:linear-gradient(180deg,rgba(178,34,34,0.06),rgba(178,34,34,0.02));display:flex;align-items:center;justify-content:center;font-weight:700;color:white;font-size:18px;box-shadow:inset 0 -6px 18px rgba(178,34,34,0.04)}
+    .meta{flex:1}
+    .rank{font-weight:800;color:var(--accent)}
+    .pais{font-size:16px;margin-top:6px}
+    .puntos{margin-top:8px;color:var(--muted);font-size:14px}
+    .badge{background:linear-gradient(90deg,var(--badge-start),var(--badge-end));padding:6px 10px;border-radius:999px;font-weight:700;color:#4b1a12;box-shadow:0 6px 18px rgba(203,63,63,0.08)}
+
+    .table{width:100%;border-collapse:collapse;margin-top:12px}
+    .table th,.table td{padding:10px 12px;text-align:left;border-bottom:1px solid #eef2ff}
+
+    .empty{padding:28px;text-align:center;color:var(--muted)}
+
+    @media (max-width:600px){.hero-grid{flex-direction:column;align-items:flex-start}.controls{flex-direction:column;align-items:stretch}.search{width:100%}}
+  </style>
+</head>
+<body>
+  <header class="hero">
+    <div class="wrap">
+      <div class="hero-grid">
+        <div>
+          <h1 class="title">Ranking FIFA — Top 20</h1>
+          <p class="subtitle">Cliente moderno: busca, ordena y cambia la vista entre tarjetas y tabla.</p>
+          <div class="controls" style="margin-top:10px">
+            <input id="q" class="search" placeholder="Buscar país..." />
+            <button id="refresh" class="btn">Actualizar</button>
+            <select id="sort" class="btn">
+              <option value="rango">Orden: Rango</option>
+              <option value="pais">Orden: País</option>
+              <option value="puntos_desc">Puntos (desc)</option>
+            </select>
+            <button id="toggleView" class="btn">Ver como tabla</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <div class="wrap">
+      <div id="info" class="empty">Cargando ranking...</div>
+      <div id="container"></div>
+      <div style="margin-top:18px;color:var(--muted);font-size:14px">Abre la API en <code>http://127.0.0.1:8000</code> y luego recarga/actualiza.</div>
+    </div>
+  </main>
+
+  <script>
+    const API = 'http://127.0.0.1:8000/ranking';
+    const container = document.getElementById('container');
+    const info = document.getElementById('info');
+    const q = document.getElementById('q');
+    const refresh = document.getElementById('refresh');
+    const sort = document.getElementById('sort');
+    const toggleView = document.getElementById('toggleView');
+    let items = [];
+    let view = 'cards';
+
+    // Mapeo de país -> URL de bandera/escudo (CDN o Wikimedia). Añade más si lo necesitas.
+    const CRESTS = {
+      "Spain": "https://flagcdn.com/w80/es.png",
+      "Argentina": "https://flagcdn.com/w80/ar.png",
+      "France": "https://flagcdn.com/w80/fr.png",
+      "England": "https://upload.wikimedia.org/wikipedia/commons/1/1f/Flag_of_England.svg",
+      "Brazil": "https://flagcdn.com/w80/br.png",
+      "Portugal": "https://flagcdn.com/w80/pt.png",
+      "Netherlands": "https://flagcdn.com/w80/nl.png",
+      "Belgium": "https://flagcdn.com/w80/be.png",
+      "Germany": "https://flagcdn.com/w80/de.png",
+      "Croatia": "https://flagcdn.com/w80/hr.png",
+      "Morocco": "https://flagcdn.com/w80/ma.png",
+      "Italy": "https://flagcdn.com/w80/it.png",
+      "Colombia": "https://flagcdn.com/w80/co.png",
+      "United States": "https://flagcdn.com/w80/us.png",
+      "Mexico": "https://flagcdn.com/w80/mx.png",
+      "Uruguay": "https://flagcdn.com/w80/uy.png",
+      "Switzerland": "https://flagcdn.com/w80/ch.png",
+      "Japan": "https://flagcdn.com/w80/jp.png",
+      "Senegal": "https://flagcdn.com/w80/sn.png",
+      "Iran": "https://flagcdn.com/w80/ir.png"
+    };
+
+    function initials(name){
+      return name.split(' ').slice(0,2).map(s=>s[0]).join('').toUpperCase();
+    }
+
+    function renderCards(list){
+      if(list.length===0){ container.innerHTML=''; info.textContent='No hay resultados.'; return }
+      info.textContent = `Mostrando ${list.length} países`;
+      const grid = document.createElement('div'); grid.className='cards';
+      list.forEach(i=>{
+        const c = document.createElement('div'); c.className='card';
+        // intenta obtener imagen del escudo/bandera; si no existe, muestra iniciales
+        const imgUrl = CRESTS[i.pais];
+        const flagHtml = imgUrl ? `<img src="${imgUrl}" alt="${i.pais} flag" style="width:56px;height:56px;object-fit:cover;border-radius:8px;">` : `<div class=\"flag\">${initials(i.pais)}</div>`;
+        c.innerHTML = `${imgUrl ? `<div style=\"width:56px;height:56px;border-radius:10px;overflow:hidden;\">${flagHtml}</div>` : flagHtml}<div class="meta"><div class="rank">#${i.rango} <span style="margin-left:8px" class="badge">${i.puntos}</span></div><div class="pais">${i.pais}</div><div class="puntos">Puntos</div></div>`;
+        grid.appendChild(c);
+      });
+      container.innerHTML=''; container.appendChild(grid);
+    }
+
+    function renderTable(list){
+      if(list.length===0){ container.innerHTML=''; info.textContent='No hay resultados.'; return }
+      info.textContent = `Mostrando ${list.length} países`;
+      const table = document.createElement('table'); table.className='table';
+      table.innerHTML = `<thead><tr><th>Rango</th><th>País</th><th>Puntos</th></tr></thead>`;
+      const tbody = document.createElement('tbody');
+      list.forEach(i=>{ const tr = document.createElement('tr'); tr.innerHTML = `<td>#${i.rango}</td><td>${i.pais}</td><td>${i.puntos}</td>`; tbody.appendChild(tr)});
+      table.appendChild(tbody);
+      container.innerHTML=''; container.appendChild(table);
+    }
+
+    function applyFilters(){
+      let list = items.slice(0,20);
+      const qv = q.value.trim().toLowerCase();
+      if(qv) list = list.filter(i=>i.pais.toLowerCase().includes(qv));
+      const s = sort.value;
+      if(s==='pais') list.sort((a,b)=>a.pais.localeCompare(b.pais));
+      if(s==='puntos_desc') list.sort((a,b)=>parseFloat(b.puntos) - parseFloat(a.puntos));
+      if(view==='cards') renderCards(list); else renderTable(list);
+    }
+
+    async function fetchRanking(){
+      info.textContent='Cargando ranking...';
+      try{
+        const res = await fetch(API);
+        if(!res.ok) throw new Error('HTTP '+res.status);
+        const data = await res.json();
+        items = data.items || [];
+        if(items.length===0) info.textContent='No hay datos. Ejecuta el scraper y la API.';
+        applyFilters();
+      }catch(err){
+        info.textContent = 'Error al conectar con la API: '+err.message + ' — Asegúrate de iniciar la API y permitir CORS.';
+        container.innerHTML='';
+      }
+    }
+
+    q.addEventListener('input', ()=>applyFilters());
+    sort.addEventListener('change', ()=>applyFilters());
+    refresh.addEventListener('click', ()=>fetchRanking());
+    toggleView.addEventListener('click', ()=>{ view = view==='cards' ? 'table' : 'cards'; toggleView.textContent = view==='cards' ? 'Ver como tabla' : 'Ver como tarjetas'; applyFilters(); });
+
+    // auto-fetch on load
+    fetchRanking();
+  </script>
+</body>
+</html>
